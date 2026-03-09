@@ -636,10 +636,6 @@ func handleSave(s *store.Store) server.ToolHandlerFunc {
 		}
 		suggestedTopicKey := suggestTopicKey(typ, title, content)
 
-		if err := checkObservationQuality(title, content); err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Quality check failed: %s", err)), nil
-		}
-
 		// Ensure the session exists
 		s.CreateSession(sessionID, project, "")
 

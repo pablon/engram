@@ -79,78 +79,6 @@ func TestHandleSuggestTopicKeyRequiresInput(t *testing.T) {
 	}
 }
 
-func TestCheckObservationQualityRejectsTitleTooShort(t *testing.T) {
-	err := checkObservationQuality("ab", "this content has enough words to pass the check")
-	if err == nil {
-		t.Fatal("expected quality error for short title")
-	}
-	if !strings.Contains(err.Error(), "title too short") {
-		t.Fatalf("unexpected error message: %q", err.Error())
-	}
-}
-
-func TestCheckObservationQualityRejectsContentTooShort(t *testing.T) {
-	err := checkObservationQuality("Valid title", "too few words")
-	if err == nil {
-		t.Fatal("expected quality error for short content")
-	}
-	if !strings.Contains(err.Error(), "content too brief") {
-		t.Fatalf("unexpected error message: %q", err.Error())
-	}
-}
-
-func TestCheckObservationQualityRejectsNoise(t *testing.T) {
-	err := checkObservationQuality("Valid title", "placeholder")
-	if err == nil {
-		t.Fatal("expected quality error for noise content")
-	}
-}
-
-func TestCheckObservationQualityAcceptsValidContent(t *testing.T) {
-	err := checkObservationQuality("JWT auth strategy", "Switched from session-based auth to JWT because sessions do not scale across multiple instances")
-	if err != nil {
-		t.Fatalf("unexpected quality error: %v", err)
-	}
-}
-
-func TestHandleSaveRejectsLowQualityContent(t *testing.T) {
-	s := newMCPTestStore(t)
-	h := handleSave(s)
-
-	req := mcppkg.CallToolRequest{Params: mcppkg.CallToolParams{Arguments: map[string]any{
-		"title":   "ok",
-		"content": "done",
-	}}}
-
-	res, err := h(context.Background(), req)
-	if err != nil {
-		t.Fatalf("handler error: %v", err)
-	}
-	if !res.IsError {
-		t.Fatal("expected quality rejection for trivial content")
-	}
-	if !strings.Contains(callResultText(t, res), "Quality check failed") {
-		t.Fatalf("unexpected error text: %q", callResultText(t, res))
-	}
-}
-
-func TestHandleSaveRejectsShortTitle(t *testing.T) {
-	s := newMCPTestStore(t)
-	h := handleSave(s)
-
-	req := mcppkg.CallToolRequest{Params: mcppkg.CallToolParams{Arguments: map[string]any{
-		"title":   "ab",
-		"content": "this content is detailed enough to pass the quality check without any issues",
-	}}}
-
-	res, err := h(context.Background(), req)
-	if err != nil {
-		t.Fatalf("handler error: %v", err)
-	}
-	if !res.IsError {
-		t.Fatal("expected quality rejection for short title")
-	}
-}
 
 func TestHandleSaveSuggestsTopicKeyWhenMissing(t *testing.T) {
 	s := newMCPTestStore(t)
@@ -1422,7 +1350,7 @@ func TestHandleSaveCreatesProjectScopedSession(t *testing.T) {
 	// Save from project A without session_id
 	reqA := mcppkg.CallToolRequest{Params: mcppkg.CallToolParams{Arguments: map[string]any{
 		"title":   "Decision A",
-		"content": "Architecture decisions and boundaries for project A",
+		"content": "Architecture for project A",
 		"type":    "architecture",
 		"project": "projectA",
 	}}}
@@ -1434,7 +1362,7 @@ func TestHandleSaveCreatesProjectScopedSession(t *testing.T) {
 	// Save from project B without session_id
 	reqB := mcppkg.CallToolRequest{Params: mcppkg.CallToolParams{Arguments: map[string]any{
 		"title":   "Decision B",
-		"content": "Architecture decisions and boundaries for project B",
+		"content": "Architecture for project B",
 		"type":    "architecture",
 		"project": "projectB",
 	}}}
@@ -1534,7 +1462,7 @@ func TestExplicitSessionIDBypassesDefault(t *testing.T) {
 	// Provide explicit session_id — should NOT use defaultSessionID
 	req := mcppkg.CallToolRequest{Params: mcppkg.CallToolParams{Arguments: map[string]any{
 		"title":      "Explicit session test",
-		"content":    "Testing that explicit session ID is used correctly",
+		"content":    "Testing explicit session ID",
 		"type":       "discovery",
 		"project":    "myproject",
 		"session_id": "custom-session-123",
