@@ -1,6 +1,9 @@
 // Package setup handles agent plugin installation.
 //
 //   - OpenCode: copies embedded plugin file to ~/.config/opencode/plugins/
+//     and injects MCP registration in opencode.json using the resolved binary
+//     path (absolute on Windows, bare "engram" on Unix) so the MCP subprocess
+//     never requires PATH resolution in headless/systemd environments.
 //   - Claude Code: runs `claude plugin marketplace add` + `claude plugin install`,
 //     then writes a durable MCP config to ~/.claude/mcp/engram.json using the
 //     absolute binary path so the subprocess never needs PATH resolution.
@@ -268,9 +271,10 @@ func installOpenCode() (*Result, error) {
 	files := 1
 	if err := injectOpenCodeMCPFn(); err != nil {
 		// Non-fatal: plugin works, MCP just needs manual config
+		cmd := resolveEngramCommand()
 		fmt.Fprintf(os.Stderr, "warning: could not auto-register MCP server in opencode.json: %v\n", err)
 		fmt.Fprintf(os.Stderr, "  Add manually to your opencode.json under \"mcp\":\n")
-		fmt.Fprintf(os.Stderr, "  \"engram\": { \"type\": \"local\", \"command\": [\"engram\", \"mcp\", \"--tools=agent\"], \"enabled\": true }\n")
+		fmt.Fprintf(os.Stderr, "  \"engram\": { \"type\": \"local\", \"command\": [%q, \"mcp\", \"--tools=agent\"], \"enabled\": true }\n", cmd)
 	} else {
 		files = 2
 	}
@@ -319,10 +323,12 @@ func injectOpenCodeMCP() error {
 		return nil // already registered, nothing to do
 	}
 
-	// Add engram MCP entry (agent profile — only tools agents need)
+	// Add engram MCP entry (agent profile — only tools agents need).
+	// Use resolveEngramCommand() so Windows users (and headless Linux setups
+	// where PATH is not inherited) get the absolute binary path.
 	engramEntry := map[string]interface{}{
 		"type":    "local",
-		"command": []string{"engram", "mcp", "--tools=agent"},
+		"command": []string{resolveEngramCommand(), "mcp", "--tools=agent"},
 		"enabled": true,
 	}
 	entryJSON, err := jsonMarshalFn(engramEntry)

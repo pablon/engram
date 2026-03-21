@@ -2014,3 +2014,241 @@ func TestInjectOpenCodeMCPHandlesJSONC(t *testing.T) {
 		t.Fatalf("expected existing 'other' entry to be preserved")
 	}
 }
+
+// ─── Issue #112: OpenCode MCP absolute-path config ───────────────────────────
+
+// TestInjectOpenCodeMCPUsesResolvedCommand verifies that injectOpenCodeMCP()
+// writes the correct command based on the OS:
+//   - Windows: absolute path from os.Executable() so headless MCP subprocesses
+//     don't need PATH.
+//   - Unix: bare "engram" (PATH is reliably inherited by child processes).
+func TestInjectOpenCodeMCPUsesResolvedCommand(t *testing.T) {
+	t.Run("windows writes absolute path in command array", func(t *testing.T) {
+		resetSetupSeams(t)
+		home := useTestHome(t)
+		runtimeGOOS = "windows"
+		osExecutable = func() (string, error) { return `C:\Users\user\bin\engram.exe`, nil }
+		t.Setenv("XDG_CONFIG_HOME", "")
+
+		configDir := filepath.Join(home, ".config", "opencode")
+		if err := os.MkdirAll(configDir, 0755); err != nil {
+			t.Fatalf("mkdir config dir: %v", err)
+		}
+
+		if err := injectOpenCodeMCP(); err != nil {
+			t.Fatalf("injectOpenCodeMCP failed: %v", err)
+		}
+
+		raw, err := os.ReadFile(filepath.Join(configDir, "opencode.json"))
+		if err != nil {
+			t.Fatalf("read config: %v", err)
+		}
+		var cfg map[string]any
+		if err := json.Unmarshal(raw, &cfg); err != nil {
+			t.Fatalf("parse config: %v", err)
+		}
+		mcp := cfg["mcp"].(map[string]any)
+		engram := mcp["engram"].(map[string]any)
+		cmd := engram["command"].([]any)
+		if len(cmd) == 0 {
+			t.Fatalf("expected non-empty command array")
+		}
+		first := cmd[0].(string)
+		if first == "engram" {
+			t.Fatalf("expected absolute path on windows, got bare 'engram'")
+		}
+		if !strings.Contains(first, "engram") {
+			t.Fatalf("expected engram in command path, got %q", first)
+		}
+	})
+
+	t.Run("linux writes bare engram in command array", func(t *testing.T) {
+		resetSetupSeams(t)
+		home := useTestHome(t)
+		runtimeGOOS = "linux"
+		t.Setenv("XDG_CONFIG_HOME", "")
+
+		configDir := filepath.Join(home, ".config", "opencode")
+		if err := os.MkdirAll(configDir, 0755); err != nil {
+			t.Fatalf("mkdir config dir: %v", err)
+		}
+
+		if err := injectOpenCodeMCP(); err != nil {
+			t.Fatalf("injectOpenCodeMCP failed: %v", err)
+		}
+
+		raw, err := os.ReadFile(filepath.Join(configDir, "opencode.json"))
+		if err != nil {
+			t.Fatalf("read config: %v", err)
+		}
+		var cfg map[string]any
+		if err := json.Unmarshal(raw, &cfg); err != nil {
+			t.Fatalf("parse config: %v", err)
+		}
+		mcp := cfg["mcp"].(map[string]any)
+		engram := mcp["engram"].(map[string]any)
+		cmd := engram["command"].([]any)
+		if len(cmd) == 0 {
+			t.Fatalf("expected non-empty command array")
+		}
+		if got := cmd[0].(string); got != "engram" {
+			t.Fatalf("expected bare 'engram' on linux, got %q", got)
+		}
+		// Remaining args should be the MCP flags
+		if len(cmd) != 3 || cmd[1] != "mcp" || cmd[2] != "--tools=agent" {
+			t.Fatalf("expected args [engram mcp --tools=agent], got %v", cmd)
+		}
+	})
+
+	t.Run("darwin writes bare engram in command array", func(t *testing.T) {
+		resetSetupSeams(t)
+		home := useTestHome(t)
+		runtimeGOOS = "darwin"
+		t.Setenv("XDG_CONFIG_HOME", "")
+
+		configDir := filepath.Join(home, ".config", "opencode")
+		if err := os.MkdirAll(configDir, 0755); err != nil {
+			t.Fatalf("mkdir config dir: %v", err)
+		}
+
+		if err := injectOpenCodeMCP(); err != nil {
+			t.Fatalf("injectOpenCodeMCP failed: %v", err)
+		}
+
+		raw, err := os.ReadFile(filepath.Join(configDir, "opencode.json"))
+		if err != nil {
+			t.Fatalf("read config: %v", err)
+		}
+		var cfg map[string]any
+		if err := json.Unmarshal(raw, &cfg); err != nil {
+			t.Fatalf("parse config: %v", err)
+		}
+		mcp := cfg["mcp"].(map[string]any)
+		engram := mcp["engram"].(map[string]any)
+		cmd := engram["command"].([]any)
+		if len(cmd) == 0 {
+			t.Fatalf("expected non-empty command array")
+		}
+		if got := cmd[0].(string); got != "engram" {
+			t.Fatalf("expected bare 'engram' on darwin, got %q", got)
+		}
+	})
+
+	t.Run("windows executable error falls back to bare engram", func(t *testing.T) {
+		resetSetupSeams(t)
+		home := useTestHome(t)
+		runtimeGOOS = "windows"
+		osExecutable = func() (string, error) { return "", errors.New("no executable") }
+		t.Setenv("XDG_CONFIG_HOME", "")
+
+		configDir := filepath.Join(home, ".config", "opencode")
+		if err := os.MkdirAll(configDir, 0755); err != nil {
+			t.Fatalf("mkdir config dir: %v", err)
+		}
+
+		if err := injectOpenCodeMCP(); err != nil {
+			t.Fatalf("injectOpenCodeMCP failed: %v", err)
+		}
+
+		raw, err := os.ReadFile(filepath.Join(configDir, "opencode.json"))
+		if err != nil {
+			t.Fatalf("read config: %v", err)
+		}
+		var cfg map[string]any
+		if err := json.Unmarshal(raw, &cfg); err != nil {
+			t.Fatalf("parse config: %v", err)
+		}
+		mcp := cfg["mcp"].(map[string]any)
+		engram := mcp["engram"].(map[string]any)
+		cmd := engram["command"].([]any)
+		if len(cmd) == 0 {
+			t.Fatalf("expected non-empty command array")
+		}
+		// Should fall back gracefully to bare "engram"
+		if got := cmd[0].(string); got != "engram" {
+			t.Fatalf("expected fallback to bare 'engram' when os.Executable fails, got %q", got)
+		}
+	})
+}
+
+// TestInstallOpenCodeWarningUsesResolvedCommand verifies that when MCP injection
+// fails, the warning message printed to stderr uses the resolved command rather
+// than always printing bare "engram". On Windows this means the user's manual
+// config snippet will contain the absolute path they actually need.
+func TestInstallOpenCodeWarningUsesResolvedCommand(t *testing.T) {
+	t.Run("windows warning contains absolute path", func(t *testing.T) {
+		resetSetupSeams(t)
+		home := useTestHome(t)
+		runtimeGOOS = "windows"
+		osExecutable = func() (string, error) { return `C:\bin\engram.exe`, nil }
+		t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg"))
+
+		// Force MCP injection to fail so the warning branch is exercised
+		injectOpenCodeMCPFn = func() error {
+			return errors.New("cannot write config")
+		}
+
+		// Capture stderr
+		origStderr := os.Stderr
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatalf("pipe: %v", err)
+		}
+		os.Stderr = w
+
+		_, installErr := installOpenCode()
+		w.Close()
+		os.Stderr = origStderr
+
+		if installErr != nil {
+			t.Fatalf("installOpenCode should not fail when MCP injection is non-fatal: %v", installErr)
+		}
+
+		buf := make([]byte, 4096)
+		n, _ := r.Read(buf)
+		stderr := string(buf[:n])
+
+		// The path is written via %q so backslashes are escaped in the output.
+		if !strings.Contains(stderr, `engram.exe`) {
+			t.Fatalf("expected absolute path in warning message, got:\n%s", stderr)
+		}
+		// Must NOT be the bare "engram" unquoted form
+		if strings.Contains(stderr, `["engram",`) {
+			t.Fatalf("expected absolute path (not bare engram) in warning message, got:\n%s", stderr)
+		}
+	})
+
+	t.Run("linux warning contains bare engram", func(t *testing.T) {
+		resetSetupSeams(t)
+		home := useTestHome(t)
+		runtimeGOOS = "linux"
+		t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg"))
+
+		injectOpenCodeMCPFn = func() error {
+			return errors.New("cannot write config")
+		}
+
+		origStderr := os.Stderr
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatalf("pipe: %v", err)
+		}
+		os.Stderr = w
+
+		_, installErr := installOpenCode()
+		w.Close()
+		os.Stderr = origStderr
+
+		if installErr != nil {
+			t.Fatalf("installOpenCode should not fail when MCP injection is non-fatal: %v", installErr)
+		}
+
+		buf := make([]byte, 4096)
+		n, _ := r.Read(buf)
+		stderr := string(buf[:n])
+
+		if !strings.Contains(stderr, `"engram"`) {
+			t.Fatalf("expected bare 'engram' in warning message on linux, got:\n%s", stderr)
+		}
+	})
+}
